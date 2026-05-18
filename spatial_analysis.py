@@ -14,9 +14,41 @@ class SpatialAnalyzer:
         self.n = len(feats)
         self.values = np.array([c[1] for c in contributions])  # contrib values
         self.coords = np.array([[
-            f.geometry().centroid().x(),
-            f.geometry().centroid().y()
+            self._get_centroid_x(f.geometry()),
+            self._get_centroid_y(f.geometry())
         ] for f in feats])
+    
+    def _get_centroid_x(self, geom):
+        """Safely get centroid X coordinate, with fallback to bounding box center"""
+        try:
+            if geom.isGeosValid() and not geom.isEmpty():
+                centroid = geom.centroid()
+                if centroid and not centroid.isEmpty():
+                    return centroid.asPoint().x()
+        except:
+            pass
+        # Fallback to bounding box center
+        try:
+            bbox = geom.boundingBox()
+            return bbox.center().x()
+        except:
+            return 0.0
+    
+    def _get_centroid_y(self, geom):
+        """Safely get centroid Y coordinate, with fallback to bounding box center"""
+        try:
+            if geom.isGeosValid() and not geom.isEmpty():
+                centroid = geom.centroid()
+                if centroid and not centroid.isEmpty():
+                    return centroid.asPoint().y()
+        except:
+            pass
+        # Fallback to bounding box center
+        try:
+            bbox = geom.boundingBox()
+            return bbox.center().y()
+        except:
+            return 0.0
     
     def _build_weight_matrix(self, weight_type="queen"):
         """Build spatial weight matrix"""
