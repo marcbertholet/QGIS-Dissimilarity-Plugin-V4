@@ -7,7 +7,8 @@ from qgis.PyQt.QtWidgets import (
 from qgis.PyQt.QtCore import QThread, pyqtSignal, Qt
 from qgis.core import (
     QgsVectorLayer, QgsFeature, QgsField, QgsProject,
-    QgsSymbol, QgsRendererRange, QgsGraduatedSymbolRenderer
+    QgsSymbol, QgsRendererRange, QgsGraduatedSymbolRenderer,
+    QgsCategorizedSymbolRenderer
 )
 from PyQt5.QtCore import QVariant
 from PyQt5.QtGui import QColor
@@ -450,6 +451,9 @@ class MainDialog(QDialog):
         if "lisa" in results:
             pr.addAttributes([QgsField("lisa_quad", QVariant.String)])
         
+        if "getis" in results:
+            pr.addAttributes([QgsField("getis_z_score", QVariant.Double)])
+        
         out.updateFields()
         
         # Add features
@@ -470,14 +474,23 @@ class MainDialog(QDialog):
                 lisa_quad = results["lisa"]["quadrants"].get(i, "NS")
                 attrs.append(lisa_quad)
             
+            if "getis" in results:
+                getis_z = results["getis"]["z_scores"][i] if i < len(results["getis"]["z_scores"]) else 0
+                attrs.append(getis_z)
+            
             nf.setAttributes(attrs)
             new_feats.append(nf)
         
         pr.addFeatures(new_feats)
         out.updateExtents()
         
-        # Apply styling
-        self._apply_styling(out, "contrib")
+        # Apply styling based on available data
+        if "lisa" in results:
+            self._apply_lisa_styling(out)
+        elif "getis" in results:
+            self._apply_getis_styling(out)
+        else:
+            self._apply_styling(out, "contrib")
         
         QgsProject.instance().addMapLayer(out)
         self.iface.mapCanvas().zoomToFullExtent()
@@ -523,6 +536,84 @@ class MainDialog(QDialog):
             ranges.append(rng)
         
         renderer = QgsGraduatedSymbolRenderer(field_name, ranges)
+        layer.setRenderer(renderer)
+        layer.triggerRepaint()
+
+    def _apply_lisa_styling(self, layer):
+        """Apply LISA categorized styling"""
+        # LISA categories with colors
+        categories_colors = {
+            "HH": QColor(255, 0, 0),      # Red - Hot-spots (High-High)
+            "LL": QColor(0, 0, 255),      # Blue - Cold-spots (Low-Low)
+            "HL": QColor(255, 200, 200),  # Light Red - High-Low outliers
+            "LH": QColor(200, 200, 255),  # Light Blue - Low-High outliers
+            "NS": QColor(200, 200, 200)   # Gray - Not significant
+        }
+        
+        field_index = layer.fields().indexFromName("lisa_quad")
+        
+        if field_index == -1:
+            return
+        
+        categories = []
+        
+        for quad, color in categories_colors.items():
+            symbol = QgsSymbol.defaultSymbol(layer.geometryType())
+            symbol.setColor(color)
+            
+            label_map = {
+                "HH": "Hot-spots (High-High)",
+                "LL": "Cold-spots (Low-Low)",
+                "HL": "High-Low outliers",
+                "LH": "Low-High outliers",
+                "NS": "Not significant"
+            }
+            
+            from qgis.core import QgsRendererCategory
+            categories.append(
+                QgsRendererCategory(quad, symbol, label_map.get(quad, quad))
+            )
+        
+        renderer = QgsCategorizedSymbolRenderer("lisa_quad", categories)
+        layer.setRenderer(renderer)
+        layer.triggerRepaint()
+
+    def _apply_getis_styling(self, layer):
+        """Apply Getis-Ord categorized styling"""
+        field_index = layer.fields().indexFromName("getis_z_score")
+        
+        if field_index == -1:
+            return
+        
+        # Get values
+        values = []
+        for feat in layer.getFeatures():
+            val = feat["getis_z_score"]
+            if val is not None:
+                values.append(float(val))
+        
+        if not values:
+            return
+        
+        # Create ranges for Getis-Ord Z-scores
+        ranges = []
+        
+        # Hotspots (z > 1.96)
+        symbol_hot = QgsSymbol.defaultSymbol(layer.geometryType())
+        symbol_hot.setColor(QColor(255, 0, 0))
+        ranges.append(QgsRendererRange(1.96, max(values), symbol_hot, "Hotspots (z > 1.96)"))
+        
+        # Insignificant (-1.96 to 1.96)
+        symbol_ns = QgsSymbol.defaultSymbol(layer.geometryType())
+        symbol_ns.setColor(QColor(200, 200, 200))
+        ranges.append(QgsRendererRange(-1.96, 1.96, symbol_ns, "Not significant (-1.96 to 1.96)"))
+        
+        # Coldspots (z < -1.96)
+        symbol_cold = QgsSymbol.defaultSymbol(layer.geometryType())
+        symbol_cold.setColor(QColor(0, 0, 255))
+        ranges.append(QgsRendererRange(min(values), -1.96, symbol_cold, "Coldspots (z < -1.96)"))
+        
+        renderer = QgsGraduatedSymbolRenderer("getis_z_score", ranges)
         layer.setRenderer(renderer)
         layer.triggerRepaint()
 
