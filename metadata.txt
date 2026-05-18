@@ -1,0 +1,17 @@
+[general]
+name=Dissimilarity Index PRO V4
+qgisMinimumVersion=3.0
+qgisMaximumVersion=3.99
+description=Advanced spatial dissimilarity analysis with Moran's I, Geary's C, LISA, Getis-Ord, and statistical indices
+version=4.0
+author=Marc Bertholet
+email=
+about=Complete suite for spatial autocorrelation and dissimilarity analysis
+tracker=https://github.com/marcbertholet/QGIS-Dissimilarity-Plugin-V4/issues
+repository=https://github.com/marcbertholet/QGIS-Dissimilarity-Plugin-V4
+branch=main
+helpContent=
+icon=icon.png
+tags=spatial analysis, dissimilarity, Moran, statistics, clustering
+experimental=False
+deprecated=False
